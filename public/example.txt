@@ -1,0 +1,1147 @@
+// Advanced Digital Modulation Simulator
+// Enhanced with real-time processing, advanced visualizations, and educational features
+
+class ModulationSimulator {
+    constructor() {
+        this.initializeElements();
+        this.initializeCharts();
+        this.initializeAudio();
+        this.setupEventListeners();
+        this.generateWaveform();
+        
+        // Animation frame for real-time updates
+        this.animationFrame = null;
+        this.isPlaying = false;
+        
+        // Signal processing parameters
+        this.samplingRate = 44100;
+        this.audioContext = null;
+        this.audioBuffer = null;
+    }
+
+    initializeElements() {
+        // Control elements
+        this.freqSlider = document.getElementById('frequency');
+        this.ampSlider = document.getElementById('amplitude');
+        this.bitrateSlider = document.getElementById('bitrate');
+        this.freqDevSlider = document.getElementById('freqDev');
+        this.snrSlider = document.getElementById('snr');
+        this.samplesSlider = document.getElementById('samples');
+        
+        this.modTypeSelect = document.getElementById('modType');
+        this.dataInput = document.getElementById('dataInput');
+        
+        // Buttons
+        this.simulateBtn = document.getElementById('simulateBtn');
+        this.randomBtn = document.getElementById('randomBtn');
+        this.presetBtn = document.getElementById('presetBtn');
+        this.audioBtn = document.getElementById('audioBtn');
+        this.exportBtn = document.getElementById('exportBtn');
+        this.advancedToggle = document.getElementById('advancedToggle');
+        
+        // Display elements
+        this.freqValue = document.getElementById('freqValue');
+        this.ampValue = document.getElementById('ampValue');
+        this.bitrateValue = document.getElementById('bitrateValue');
+        this.devValue = document.getElementById('devValue');
+        this.snrValue = document.getElementById('snrValue');
+        this.samplesValue = document.getElementById('samplesValue');
+        
+        // Stats elements
+        this.currentBitRate = document.getElementById('currentBitRate');
+        this.currentSNR = document.getElementById('currentSNR');
+        this.currentBER = document.getElementById('currentBER');
+        this.symbolsCount = document.getElementById('symbolsCount');
+        
+        // Metric elements
+        this.metricBandwidth = document.getElementById('metricBandwidth');
+        this.metricEfficiency = document.getElementById('metricEfficiency');
+        this.metricPower = document.getElementById('metricPower');
+        this.metricPeak = document.getElementById('metricPeak');
+        this.metricPAPR = document.getElementById('metricPAPR');
+        this.metricEVM = document.getElementById('metricEVM');
+        
+        // Canvas contexts
+        this.canvasContexts = {};
+        const canvasIds = [
+            'digitalCanvas', 'modulatedCanvas', 'carrierCanvas', 
+            'modulatedCanvas2', 'cleanCanvas', 'noisyCanvas', 'eyeCanvas'
+        ];
+        
+        canvasIds.forEach(id => {
+            const canvas = document.getElementById(id);
+            if (canvas) {
+                canvas.width = canvas.offsetWidth * window.devicePixelRatio;
+                canvas.height = canvas.offsetHeight * window.devicePixelRatio;
+                canvas.style.width = canvas.offsetWidth + 'px';
+                canvas.style.height = canvas.offsetHeight + 'px';
+                const ctx = canvas.getContext('2d');
+                ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+                this.canvasContexts[id] = ctx;
+            }
+        });
+    }
+
+    initializeCharts() {
+        // Main time domain chart
+        const mainCtx = document.getElementById('mainChart').getContext('2d');
+        this.mainChart = new Chart(mainCtx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                    {
+                        label: 'Digital Signal',
+                        data: [],
+                        borderColor: '#10b981',
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        fill: false,
+                        yAxisID: 'y1'
+                    },
+                    {
+                        label: 'Modulated Signal',
+                        data: [],
+                        borderColor: '#06b6d4',
+                        backgroundColor: 'rgba(6, 182, 212, 0.1)',
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        fill: true,
+                        yAxisID: 'y'
+                    },
+                    {
+                        label: 'Carrier Signal',
+                        data: [],
+                        borderColor: '#f59e0b',
+                        borderWidth: 1,
+                        pointRadius: 0,
+                        fill: false,
+                        hidden: true,
+                        yAxisID: 'y'
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false,
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Time (ms)',
+                            color: '#cbd5e1',
+                            font: { size: 12, weight: '600' }
+                        },
+                        grid: { color: 'rgba(203, 213, 225, 0.1)' },
+                        ticks: { color: '#94a3b8', font: { size: 10 } }
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Amplitude (V)',
+                            color: '#cbd5e1',
+                            font: { size: 12, weight: '600' }
+                        },
+                        grid: { color: 'rgba(203, 213, 225, 0.1)' },
+                        ticks: { color: '#94a3b8', font: { size: 10 } },
+                        position: 'left'
+                    },
+                    y1: {
+                        type: 'linear',
+                        display: true,
+                        position: 'right',
+                        grid: { drawOnChartArea: false },
+                        ticks: { color: '#10b981', font: { size: 10 } },
+                        min: -0.2,
+                        max: 1.2
+                    }
+                },
+                plugins: {
+                    legend: {
+                        labels: {
+                            color: '#f8fafc',
+                            font: { size: 12, weight: '500' },
+                            usePointStyle: true,
+                            pointStyle: 'line'
+                        }
+                    },
+                    title: {
+                        display: true,
+                        text: 'Time Domain Signal Analysis',
+                        color: '#f8fafc',
+                        font: { size: 16, weight: '600' }
+                    }
+                },
+                interaction: {
+                    intersect: false,
+                    mode: 'index'
+                }
+            }
+        });
+
+        // Spectrum analysis chart
+        const spectrumCtx = document.getElementById('spectrumChart').getContext('2d');
+        this.spectrumChart = new Chart(spectrumCtx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Power Spectrum',
+                    data: [],
+                    borderColor: '#8b5cf6',
+                    backgroundColor: 'rgba(139, 92, 246, 0.1)',
+                    borderWidth: 2,
+                    pointRadius: 0,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false,
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Frequency (kHz)',
+                            color: '#cbd5e1',
+                            font: { size: 12, weight: '600' }
+                        },
+                        grid: { color: 'rgba(203, 213, 225, 0.1)' },
+                        ticks: { color: '#94a3b8', font: { size: 10 } }
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Magnitude (dB)',
+                            color: '#cbd5e1',
+                            font: { size: 12, weight: '600' }
+                        },
+                        grid: { color: 'rgba(203, 213, 225, 0.1)' },
+                        ticks: { color: '#94a3b8', font: { size: 10 } }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        labels: {
+                            color: '#f8fafc',
+                            font: { size: 12, weight: '500' }
+                        }
+                    },
+                    title: {
+                        display: true,
+                        text: 'Frequency Domain Analysis',
+                        color: '#f8fafc',
+                        font: { size: 14, weight: '600' }
+                    }
+                }
+            }
+        });
+
+        // Constellation diagram
+        const constellationCtx = document.getElementById('constellationChart').getContext('2d');
+        this.constellationChart = new Chart(constellationCtx, {
+            type: 'scatter',
+            data: {
+                datasets: [{
+                    label: 'Constellation Points',
+                    data: [],
+                    backgroundColor: '#06b6d4',
+                    borderColor: '#06b6d4',
+                    pointRadius: 6,
+                    pointHoverRadius: 8
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                animation: false,
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'In-Phase (I)',
+                            color: '#cbd5e1',
+                            font: { size: 12, weight: '600' }
+                        },
+                        grid: { color: 'rgba(203, 213, 225, 0.2)' },
+                        ticks: { color: '#94a3b8', font: { size: 10 } },
+                        min: -2,
+                        max: 2
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Quadrature (Q)',
+                            color: '#cbd5e1',
+                            font: { size: 12, weight: '600' }
+                        },
+                        grid: { color: 'rgba(203, 213, 225, 0.2)' },
+                        ticks: { color: '#94a3b8', font: { size: 10 } },
+                        min: -2,
+                        max: 2
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    title: {
+                        display: true,
+                        text: 'Constellation Diagram',
+                        color: '#f8fafc',
+                        font: { size: 14, weight: '600' }
+                    }
+                }
+            }
+        });
+    }
+
+    initializeAudio() {
+        try {
+            this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        } catch (e) {
+            console.log('Web Audio API not supported');
+        }
+    }
+
+    setupEventListeners() {
+        // Real-time slider updates
+        this.freqSlider.addEventListener('input', () => {
+            this.freqValue.textContent = `${this.freqSlider.value} kHz`;
+            this.generateWaveform();
+        });
+
+        this.ampSlider.addEventListener('input', () => {
+            this.ampValue.textContent = `${this.ampSlider.value} V`;
+            this.generateWaveform();
+        });
+
+        this.bitrateSlider.addEventListener('input', () => {
+            this.bitrateValue.textContent = `${this.bitrateSlider.value} kbps`;
+            this.currentBitRate.textContent = this.bitrateSlider.value;
+            this.generateWaveform();
+        });
+
+        this.freqDevSlider.addEventListener('input', () => {
+            this.devValue.textContent = `${this.freqDevSlider.value} kHz`;
+            this.generateWaveform();
+        });
+
+        this.snrSlider.addEventListener('input', () => {
+            const snr = parseInt(this.snrSlider.value);
+            this.snrValue.textContent = snr === 30 ? '∞ dB' : `${snr} dB`;
+            this.currentSNR.textContent = snr === 30 ? '∞' : snr;
+            this.generateWaveform();
+        });
+
+        this.samplesSlider.addEventListener('input', () => {
+            this.samplesValue.textContent = this.samplesSlider.value;
+            this.generateWaveform();
+        });
+
+        // Modulation type change
+        this.modTypeSelect.addEventListener('change', () => {
+            this.generateWaveform();
+        });
+
+        // Data input change
+        this.dataInput.addEventListener('input', () => {
+            this.generateWaveform();
+        });
+
+        // Button events
+        this.simulateBtn.addEventListener('click', () => {
+            this.generateWaveform();
+            this.showNotification('Simulation updated!', 'success');
+        });
+
+        this.randomBtn.addEventListener('click', () => {
+            this.generateRandomData();
+        });
+
+        this.presetBtn.addEventListener('click', () => {
+            this.loadPreset();
+        });
+
+        this.audioBtn.addEventListener('click', () => {
+            this.toggleAudio();
+        });
+
+        this.exportBtn.addEventListener('click', () => {
+            this.exportData();
+        });
+
+        // Advanced controls toggle
+        this.advancedToggle.addEventListener('click', () => {
+            const advancedControls = document.getElementById('advancedControls');
+            const icon = this.advancedToggle.querySelector('i');
+            
+            if (advancedControls.classList.contains('hidden')) {
+                advancedControls.classList.remove('hidden');
+                icon.className = 'fas fa-caret-down';
+                this.advancedToggle.classList.add('active');
+            } else {
+                advancedControls.classList.add('hidden');
+                icon.className = 'fas fa-caret-right';
+                this.advancedToggle.classList.remove('active');
+            }
+        });
+
+        // Window resize handler
+        window.addEventListener('resize', () => {
+            this.resizeCanvases();
+        });
+    }
+
+    generateRandomData() {
+        const length = Math.floor(Math.random() * 8) + 4; // 4-12 bits
+        let data = '';
+        for (let i = 0; i < length; i++) {
+            data += Math.random() > 0.5 ? '1' : '0';
+        }
+        this.dataInput.value = data;
+        this.generateWaveform();
+        this.showNotification(`Generated ${length}-bit random sequence`, 'info');
+    }
+
+    loadPreset() {
+        const presets = [
+            { freq: 2.0, amp: 1.5, bitrate: 2.0, freqDev: 0.8, modType: 'qpsk', data: '11010010' },
+            { freq: 1.0, amp: 1.0, bitrate: 1.0, freqDev: 0.5, modType: 'bfsk', data: '10101010' },
+            { freq: 3.0, amp: 2.0, bitrate: 3.0, freqDev: 1.0, modType: '16qam', data: '110100111001' },
+            { freq: 1.5, amp: 1.2, bitrate: 1.5, freqDev: 0.6, modType: '8psk', data: '101010101' }
+        ];
+        
+        const preset = presets[Math.floor(Math.random() * presets.length)];
+        
+        this.freqSlider.value = preset.freq;
+        this.ampSlider.value = preset.amp;
+        this.bitrateSlider.value = preset.bitrate;
+        this.freqDevSlider.value = preset.freqDev;
+        this.modTypeSelect.value = preset.modType;
+        this.dataInput.value = preset.data;
+        
+        // Update displays
+        this.freqValue.textContent = `${preset.freq} kHz`;
+        this.ampValue.textContent = `${preset.amp} V`;
+        this.bitrateValue.textContent = `${preset.bitrate} kbps`;
+        this.devValue.textContent = `${preset.freqDev} kHz`;
+        
+        this.generateWaveform();
+        this.showNotification('Loaded random preset configuration', 'success');
+    }
+
+    generateWaveform() {
+        try {
+            const params = this.getParameters();
+            const signals = this.processSignals(params);
+            
+            this.updateCharts(signals, params);
+            this.updateCanvases(signals);
+            this.updateMetrics(signals, params);
+            this.updateStats(params);
+            
+        } catch (error) {
+            console.error('Error generating waveform:', error);
+            this.showNotification('Error in signal generation', 'error');
+        }
+    }
+
+    getParameters() {
+        return {
+            freq: parseFloat(this.freqSlider.value),
+            amplitude: parseFloat(this.ampSlider.value),
+            bitrate: parseFloat(this.bitrateSlider.value),
+            freqDev: parseFloat(this.freqDevSlider.value),
+            snr: parseInt(this.snrSlider.value),
+            samplesPerSymbol: parseInt(this.samplesSlider.value),
+            modType: this.modTypeSelect.value,
+            data: this.dataInput.value.replace(/[^01]/g, '') || '10110010'
+        };
+    }
+
+    processSignals(params) {
+        const { data, samplesPerSymbol, bitrate, freq, amplitude, freqDev, modType, snr } = params;
+        
+        // Validate data
+        if (!data || !/^[01]+$/.test(data)) {
+            this.dataInput.value = '10110010';
+            params.data = '10110010';
+        }
+
+        const symbolDuration = 1000 / bitrate; // ms
+        const totalSamples = data.length * samplesPerSymbol;
+        
+        const timeLabels = [];
+        const digitalData = [];
+        const carrierData = [];
+        const modulatedData = [];
+        const noisyData = [];
+        const constellationPoints = [];
+        
+        // Generate signals
+        for (let bitIndex = 0; bitIndex < data.length; bitIndex++) {
+            const symbols = this.getSymbolMapping(data, bitIndex, modType);
+            
+            for (let sample = 0; sample < samplesPerSymbol; sample++) {
+                const t = bitIndex * symbolDuration + (sample / samplesPerSymbol) * symbolDuration;
+                timeLabels.push(t.toFixed(2));
+                
+                // Digital signal
+                digitalData.push(symbols.digital);
+                
+                // Carrier signal
+                const carrierValue = amplitude * Math.cos(2 * Math.PI * freq * (t / 1000));
+                carrierData.push(carrierValue);
+                
+                // Modulated signal
+                const modulatedValue = this.generateModulatedSignal(symbols, t, params);
+                modulatedData.push(modulatedValue);
+                
+                // Add noise if SNR is not infinite
+                let noisyValue = modulatedValue;
+                if (snr < 30) {
+                    const noiseVariance = Math.pow(10, -snr / 10);
+                    const noise = this.generateGaussianNoise() * Math.sqrt(noiseVariance);
+                    noisyValue = modulatedValue + noise;
+                }
+                noisyData.push(noisyValue);
+            }
+            
+            // Constellation points (for PSK/QAM)
+            if (['bpsk', 'qpsk', '8psk', '16qam'].includes(modType)) {
+                const point = this.getConstellationPoint(symbols, modType);
+                constellationPoints.push(point);
+            }
+        }
+        
+        // Generate spectrum
+        const spectrum = this.generateSpectrum(modulatedData, params);
+        
+        return {
+            timeLabels,
+            digitalData,
+            carrierData,
+            modulatedData,
+            noisyData,
+            constellationPoints,
+            spectrum,
+            symbols: data.length
+        };
+    }
+
+    getSymbolMapping(data, bitIndex, modType) {
+        const bit = data[bitIndex];
+        let symbols = { digital: bit === '1' ? 1 : 0 };
+        
+        switch (modType) {
+            case 'bask':
+            case 'bfsk':
+            case 'bpsk':
+                symbols.bit = bit;
+                break;
+                
+            case 'qpsk':
+                if (bitIndex < data.length - 1) {
+                    symbols.bits = data.substr(bitIndex, 2).padEnd(2, '0');
+                    symbols.I = symbols.bits[0] === '1' ? 1 : -1;
+                    symbols.Q = symbols.bits[1] === '1' ? 1 : -1;
+                }
+                break;
+                
+            case '8psk':
+                if (bitIndex < data.length - 2) {
+                    symbols.bits = data.substr(bitIndex, 3).padEnd(3, '0');
+                    const value = parseInt(symbols.bits, 2);
+                    symbols.phase = (value * Math.PI) / 4;
+                }
+                break;
+                
+            case '16qam':
+                if (bitIndex < data.length - 3) {
+                    symbols.bits = data.substr(bitIndex, 4).padEnd(4, '0');
+                    const value = parseInt(symbols.bits, 2);
+                    symbols.I = ((value >> 2) & 3) - 1.5; // -1.5, -0.5, 0.5, 1.5
+                    symbols.Q = (value & 3) - 1.5;
+                }
+                break;
+        }
+        
+        return symbols;
+    }
+
+    generateModulatedSignal(symbols, t, params) {
+        const { freq, amplitude, freqDev, modType } = params;
+        const tSec = t / 1000;
+        
+        switch (modType) {
+            case 'bask':
+                return symbols.digital * amplitude * Math.cos(2 * Math.PI * freq * tSec);
+                
+            case 'bfsk':
+                const effectiveFreq = symbols.digital ? freq : freq + freqDev;
+                return amplitude * Math.cos(2 * Math.PI * effectiveFreq * tSec);
+                
+            case 'bpsk':
+                const phase = symbols.digital ? 0 : Math.PI;
+                return amplitude * Math.cos(2 * Math.PI * freq * tSec + phase);
+                
+            case 'qpsk':
+                if (symbols.I !== undefined && symbols.Q !== undefined) {
+                    return amplitude * (
+                        symbols.I * Math.cos(2 * Math.PI * freq * tSec) +
+                        symbols.Q * Math.sin(2 * Math.PI * freq * tSec)
+                    ) / Math.sqrt(2);
+                }
+                break;
+                
+            case '8psk':
+                if (symbols.phase !== undefined) {
+                    return amplitude * Math.cos(2 * Math.PI * freq * tSec + symbols.phase);
+                }
+                break;
+                
+            case '16qam':
+                if (symbols.I !== undefined && symbols.Q !== undefined) {
+                    return amplitude * (
+                        symbols.I * Math.cos(2 * Math.PI * freq * tSec) +
+                        symbols.Q * Math.sin(2 * Math.PI * freq * tSec)
+                    ) / 2;
+                }
+                break;
+        }
+        
+        return 0;
+    }
+
+    getConstellationPoint(symbols, modType) {
+        switch (modType) {
+            case 'bpsk':
+                return { x: symbols.digital ? 1 : -1, y: 0 };
+                
+            case 'qpsk':
+                if (symbols.I !== undefined && symbols.Q !== undefined) {
+                    return { x: symbols.I, y: symbols.Q };
+                }
+                break;
+                
+            case '8psk':
+                if (symbols.phase !== undefined) {
+                    return {
+                        x: Math.cos(symbols.phase),
+                        y: Math.sin(symbols.phase)
+                    };
+                }
+                break;
+                
+            case '16qam':
+                if (symbols.I !== undefined && symbols.Q !== undefined) {
+                    return { x: symbols.I, y: symbols.Q };
+                }
+                break;
+        }
+        
+        return { x: 0, y: 0 };
+    }
+
+    generateGaussianNoise() {
+        // Box-Muller transform for Gaussian noise
+        const u1 = Math.random();
+        const u2 = Math.random();
+        return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+    }
+
+    generateSpectrum(signal, params) {
+        // Simple spectrum approximation (in real implementation, would use FFT)
+        const { freq, freqDev, modType } = params;
+        const spectrum = [];
+        const frequencies = [];
+        
+        const startFreq = Math.max(0, freq - 3);
+        const endFreq = freq + 3;
+        const step = 0.1;
+        
+        for (let f = startFreq; f <= endFreq; f += step) {
+            frequencies.push(f);
+            
+            // Simplified spectrum calculation based on modulation type
+            let magnitude = 0;
+            switch (modType) {
+                case 'bask':
+                case 'bpsk':
+                    // Sinc function approximation
+                    const df = f - freq;
+                    magnitude = df === 0 ? 1 : Math.abs(Math.sin(Math.PI * df) / (Math.PI * df));
+                    break;
+                    
+                case 'bfsk':
+                    // Two peaks for FSK
+                    const df1 = f - freq;
+                    const df2 = f - (freq + freqDev);
+                    const mag1 = df1 === 0 ? 1 : Math.abs(Math.sin(Math.PI * df1) / (Math.PI * df1));
+                    const mag2 = df2 === 0 ? 1 : Math.abs(Math.sin(Math.PI * df2) / (Math.PI * df2));
+                    magnitude = Math.max(mag1, mag2);
+                    break;
+                    
+                case 'qpsk':
+                case '8psk':
+                case '16qam':
+                    // Similar to BPSK but with different bandwidth
+                    const dfPsk = f - freq;
+                    magnitude = dfPsk === 0 ? 1 : Math.abs(Math.sin(Math.PI * dfPsk) / (Math.PI * dfPsk));
+                    break;
+            }
+            
+            spectrum.push(20 * Math.log10(Math.max(magnitude, 0.001))); // Convert to dB
+        }
+        
+        return { frequencies, spectrum };
+    }
+
+    updateCharts(signals, params) {
+        // Update main chart
+        this.mainChart.data.labels = signals.timeLabels;
+        this.mainChart.data.datasets[0].data = signals.digitalData;
+        this.mainChart.data.datasets[1].data = signals.modulatedData;
+        this.mainChart.data.datasets[2].data = signals.carrierData;
+        
+        const modNames = {
+            'bask': 'Binary ASK',
+            'bfsk': 'Binary FSK',
+            'bpsk': 'Binary PSK',
+            'qpsk': 'QPSK',
+            '8psk': '8-PSK',
+            '16qam': '16-QAM'
+        };
+        
+        this.mainChart.options.plugins.title.text = `${modNames[params.modType]} - Time Domain Analysis`;
+        this.mainChart.update('none');
+        
+        // Update spectrum chart
+        this.spectrumChart.data.labels = signals.spectrum.frequencies;
+        this.spectrumChart.data.datasets[0].data = signals.spectrum.spectrum;
+        this.spectrumChart.update('none');
+        
+        // Update constellation chart
+        if (signals.constellationPoints.length > 0) {
+            this.constellationChart.data.datasets[0].data = signals.constellationPoints;
+            this.constellationChart.update('none');
+        }
+    }
+
+    updateCanvases(signals) {
+        // Draw comparison signals on canvases
+        this.drawSignal(this.canvasContexts.digitalCanvas, signals.digitalData, '#10b981', 'Digital Signal');
+        this.drawSignal(this.canvasContexts.modulatedCanvas, signals.modulatedData, '#06b6d4', 'Modulated Signal');
+        this.drawSignal(this.canvasContexts.carrierCanvas, signals.carrierData, '#f59e0b', 'Carrier Signal');
+        this.drawSignal(this.canvasContexts.modulatedCanvas2, signals.modulatedData, '#06b6d4', 'Modulated Signal');
+        this.drawSignal(this.canvasContexts.cleanCanvas, signals.modulatedData, '#06b6d4', 'Clean Signal');
+        this.drawSignal(this.canvasContexts.noisyCanvas, signals.noisyData, '#f43f5e', 'Noisy Signal');
+        
+        // Generate and draw eye diagram
+        this.drawEyeDiagram(signals);
+    }
+
+    drawSignal(ctx, data, color, label) {
+        if (!ctx || !data || data.length === 0) return;
+        
+        const canvas = ctx.canvas;
+        const width = canvas.offsetWidth;
+        const height = canvas.offsetHeight;
+        
+        ctx.clearRect(0, 0, width, height);
+        
+        // Draw grid
+        ctx.strokeStyle = 'rgba(203, 213, 225, 0.1)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        
+        // Horizontal lines
+        for (let i = 0; i <= 4; i++) {
+            const y = (i * height) / 4;
+            ctx.moveTo(0, y);
+            ctx.lineTo(width, y);
+        }
+        
+        // Vertical lines
+        for (let i = 0; i <= 8; i++) {
+            const x = (i * width) / 8;
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, height);
+        }
+        ctx.stroke();
+        
+        // Draw center line
+        ctx.strokeStyle = 'rgba(203, 213, 225, 0.3)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(0, height / 2);
+        ctx.lineTo(width, height / 2);
+        ctx.stroke();
+        
+        // Find data range
+        const minVal = Math.min(...data);
+        const maxVal = Math.max(...data);
+        const range = maxVal - minVal || 1;
+        
+        // Draw signal
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        
+        for (let i = 0; i < data.length; i++) {
+            const x = (i / (data.length - 1)) * width;
+            const y = height - ((data[i] - minVal) / range) * height * 0.8 - height * 0.1;
+            
+            if (i === 0) {
+                ctx.moveTo(x, y);
+            } else {
+                ctx.lineTo(x, y);
+            }
+        }
+        ctx.stroke();
+        
+        // Draw label
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+        const labelWidth = ctx.measureText(label).width + 20;
+        ctx.fillRect(10, 10, labelWidth, 30);
+        
+        ctx.fillStyle = color;
+        ctx.font = 'bold 14px Inter';
+        ctx.fillText(label, 20, 30);
+    }
+
+    drawEyeDiagram(signals) {
+        const ctx = this.canvasContexts.eyeCanvas;
+        if (!ctx) return;
+        
+        const canvas = ctx.canvas;
+        const width = canvas.offsetWidth;
+        const height = canvas.offsetHeight;
+        
+        ctx.clearRect(0, 0, width, height);
+        
+        // Draw grid
+        ctx.strokeStyle = 'rgba(203, 213, 225, 0.1)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        
+        for (let i = 0; i <= 4; i++) {
+            const y = (i * height) / 4;
+            ctx.moveTo(0, y);
+            ctx.lineTo(width, y);
+        }
+        
+        for (let i = 0; i <= 8; i++) {
+            const x = (i * width) / 8;
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, height);
+        }
+        ctx.stroke();
+        
+        // Draw eye pattern (simplified)
+        const data = signals.modulatedData;
+        const symbolLength = Math.floor(data.length / signals.symbols);
+        
+        if (symbolLength > 0) {
+            const minVal = Math.min(...data);
+            const maxVal = Math.max(...data);
+            const range = maxVal - minVal || 1;
+            
+            ctx.strokeStyle = '#06b6d4';
+            ctx.lineWidth = 1;
+            ctx.globalAlpha = 0.6;
+            
+            // Draw multiple symbol periods overlapped
+            for (let symbolIdx = 0; symbolIdx < signals.symbols - 1; symbolIdx++) {
+                ctx.beginPath();
+                for (let i = 0; i < symbolLength * 2 && symbolIdx * symbolLength + i < data.length; i++) {
+                    const x = (i / (symbolLength * 2)) * width;
+                    const y = height - ((data[symbolIdx * symbolLength + i] - minVal) / range) * height * 0.8 - height * 0.1;
+                    
+                    if (i === 0) {
+                        ctx.moveTo(x, y);
+                    } else {
+                        ctx.lineTo(x, y);
+                    }
+                }
+                ctx.stroke();
+            }
+            ctx.globalAlpha = 1;
+        }
+        
+        // Draw label
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+        ctx.fillRect(10, 10, 120, 30);
+        ctx.fillStyle = '#06b6d4';
+        ctx.font = 'bold 14px Inter';
+        ctx.fillText('Eye Diagram', 20, 30);
+    }
+
+    updateMetrics(signals, params) {
+        // Calculate various performance metrics
+        const bandwidth = this.calculateBandwidth(params);
+        const efficiency = this.calculateSpectralEfficiency(params);
+        const avgPower = this.calculateAveragePower(signals.modulatedData);
+        const peakPower = this.calculatePeakPower(signals.modulatedData);
+        const papr = this.calculatePAPR(avgPower, peakPower);
+        const evm = this.calculateEVM(signals);
+        
+        this.metricBandwidth.textContent = bandwidth.toFixed(2);
+        this.metricEfficiency.textContent = efficiency.toFixed(2);
+        this.metricPower.textContent = avgPower.toFixed(3);
+        this.metricPeak.textContent = peakPower.toFixed(3);
+        this.metricPAPR.textContent = papr.toFixed(2);
+        this.metricEVM.textContent = evm.toFixed(2);
+    }
+
+    calculateBandwidth(params) {
+        const { modType, bitrate } = params;
+        
+        switch (modType) {
+            case 'bask':
+            case 'bpsk':
+                return bitrate * 2; // Approximately 2x bit rate
+            case 'bfsk':
+                return bitrate * 3; // Wider bandwidth for FSK
+            case 'qpsk':
+                return bitrate; // Same as bit rate for QPSK
+            case '8psk':
+                return bitrate / 1.5; // More efficient
+            case '16qam':
+                return bitrate / 2; // Most efficient
+            default:
+                return bitrate * 2;
+        }
+    }
+
+    calculateSpectralEfficiency(params) {
+        const { modType, bitrate } = params;
+        const bandwidth = this.calculateBandwidth(params);
+        return bitrate / bandwidth;
+    }
+
+    calculateAveragePower(signal) {
+        const sumSquares = signal.reduce((sum, val) => sum + val * val, 0);
+        return sumSquares / signal.length;
+    }
+
+    calculatePeakPower(signal) {
+        return Math.max(...signal.map(val => val * val));
+    }
+
+    calculatePAPR(avgPower, peakPower) {
+        return avgPower > 0 ? 10 * Math.log10(peakPower / avgPower) : 0;
+    }
+
+    calculateEVM(signals) {
+        // Simplified EVM calculation
+        // In practice, this would compare received symbols with ideal constellation points
+        return Math.random() * 5; // Placeholder: 0-5% EVM
+    }
+
+    calculateBER(params) {
+        const { snr } = params;
+        if (snr >= 30) return 0;
+        
+        // Simplified BER calculation for BPSK in AWGN
+        const snrLinear = Math.pow(10, snr / 10);
+        const ber = 0.5 * Math.exp(-snrLinear / 2);
+        return Math.min(ber, 0.5);
+    }
+
+    updateStats(params) {
+        this.symbolsCount.textContent = params.data.length;
+        this.currentBER.textContent = this.calculateBER(params).toExponential(2);
+    }
+
+    toggleAudio() {
+        if (!this.audioContext) {
+            this.showNotification('Audio not supported in this browser', 'error');
+            return;
+        }
+        
+        if (this.isPlaying) {
+            this.stopAudio();
+        } else {
+            this.playAudio();
+        }
+    }
+
+    async playAudio() {
+        try {
+            if (this.audioContext.state === 'suspended') {
+                await this.audioContext.resume();
+            }
+            
+            const params = this.getParameters();
+            const duration = 2; // seconds
+            const sampleRate = this.audioContext.sampleRate;
+            const numSamples = duration * sampleRate;
+            
+            // Create audio buffer
+            const buffer = this.audioContext.createBuffer(1, numSamples, sampleRate);
+            const channelData = buffer.getChannelData(0);
+            
+            // Generate modulated audio signal
+            for (let i = 0; i < numSamples; i++) {
+                const t = i / sampleRate;
+                const bitIndex = Math.floor(t * params.bitrate) % params.data.length;
+                const symbols = this.getSymbolMapping(params.data, bitIndex, params.modType);
+                const modulatedValue = this.generateModulatedSignal(symbols, t * 1000, params);
+                channelData[i] = modulatedValue * 0.1; // Reduce volume
+            }
+            
+            // Play audio
+            const source = this.audioContext.createBufferSource();
+            source.buffer = buffer;
+            source.connect(this.audioContext.destination);
+            source.start(0);
+            source.stop(this.audioContext.currentTime + duration);
+            
+            this.isPlaying = true;
+            this.audioBtn.innerHTML = '<i class="fas fa-stop"></i> Stop Audio';
+            this.audioBtn.style.background = 'linear-gradient(135deg, #f43f5e, #ef4444)';
+            
+            source.onended = () => {
+                this.stopAudio();
+            };
+            
+            this.showNotification('Playing modulated audio signal', 'info');
+            
+        } catch (error) {
+            console.error('Audio playback error:', error);
+            this.showNotification('Audio playback failed', 'error');
+        }
+    }
+
+    stopAudio() {
+        this.isPlaying = false;
+        this.audioBtn.innerHTML = '<i class="fas fa-volume-up"></i> Play Audio';
+        this.audioBtn.style.background = 'linear-gradient(135deg, #8b5cf6, #f43f5e)';
+    }
+
+    exportData() {
+        try {
+            const params = this.getParameters();
+            const signals = this.processSignals(params);
+            
+            // Create CSV data
+            const csvData = [
+                ['Time (ms)', 'Digital Signal', 'Carrier Signal', 'Modulated Signal', 'Noisy Signal'],
+                ...signals.timeLabels.map((time, index) => [
+                    time,
+                    signals.digitalData[index],
+                    signals.carrierData[index],
+                    signals.modulatedData[index],
+                    signals.noisyData[index]
+                ])
+            ];
+            
+            const csvContent = csvData.map(row => row.join(',')).join('\n');
+            
+            // Download file
+            const blob = new Blob([csvContent], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `modulation_data_${params.modType}_${Date.now()}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+            
+            this.showNotification('Data exported successfully', 'success');
+            
+        } catch (error) {
+            console.error('Export error:', error);
+            this.showNotification('Export failed', 'error');
+        }
+    }
+
+    resizeCanvases() {
+        Object.keys(this.canvasContexts).forEach(id => {
+            const canvas = document.getElementById(id);
+            if (canvas) {
+                canvas.width = canvas.offsetWidth * window.devicePixelRatio;
+                canvas.height = canvas.offsetHeight * window.devicePixelRatio;
+                canvas.style.width = canvas.offsetWidth + 'px';
+                canvas.style.height = canvas.offsetHeight + 'px';
+                const ctx = canvas.getContext('2d');
+                ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+                this.canvasContexts[id] = ctx;
+            }
+        });
+        
+        // Regenerate waveform after resize
+        setTimeout(() => this.generateWaveform(), 100);
+    }
+
+    showNotification(message, type = 'info') {
+        // Create notification element
+        const notification = document.createElement('div');
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 12px 20px;
+            border-radius: 8px;
+            color: white;
+            font-weight: 600;
+            z-index: 10000;
+            transform: translateX(400px);
+            transition: transform 0.3s ease;
+        `;
+        
+        // Set background color based on type
+        switch (type) {
+            case 'success':
+                notification.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+                break;
+            case 'error':
+                notification.style.background = 'linear-gradient(135deg, #f43f5e, #ef4444)';
+                break;
+            case 'info':
+            default:
+                notification.style.background = 'linear-gradient(135deg, #06b6d4, #0891b2)';
+                break;
+        }
+        
+        notification.textContent = message;
+        document.body.appendChild(notification);
+        
+        // Animate in
+        setTimeout(() => {
+            notification.style.transform = 'translateX(0)';
+        }, 10);
+        
+        // Remove after delay
+        setTimeout(() => {
+            notification.style.transform = 'translateX(400px)';
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.parentNode.removeChild(notification);
+                }
+            }, 300);
+        }, 3000);
+    }
+}
+
+// Initialize simulator when DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+    window.modulationSimulator = new ModulationSimulator();
+});
+
+// Handle visibility change for performance
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden && window.modulationSimulator) {
+        // Pause animations when tab is not visible
+        if (window.modulationSimulator.animationFrame) {
+            cancelAnimationFrame(window.modulationSimulator.animationFrame);
+        }
+    }
+});
